@@ -42,15 +42,12 @@ TECHNOLOGIES = [
     "Assembly",
     "VHDL",
     "Verilog",
-    "Hack",
+    "Brainfuck",
     "Shell Script",
-    "Tcl",
+    "Bash",
     "Smalltalk",
 
-    # Web Development (Frontend and Backend)
-    "Django",
-    "Flask",
-    "FastAPI",
+    # Web Development
     "HTML",
     "CSS",
     "JavaScript",
@@ -59,10 +56,12 @@ TECHNOLOGIES = [
     "Vue.js",
     "Angular",
     "SASS/SCSS",
-    "Jinja2",
     "GraphQL",
     "OAuth",
     "JWT",
+    "Django",
+    "Flask",
+    "FastAPI",
     "Nginx",
     "Apache",
 
@@ -123,13 +122,11 @@ TECHNOLOGIES = [
     "Requests",
     "BeautifulSoup",
     "Scrapy",
-    "Pytest",
     "Mockito",
     "JUnit",
 
     # Deployment & Orchestration
     "Docker Compose",
-    "Jenkins",
     "Kubernetes",
     "Nginx",
     "Apache",
@@ -151,16 +148,16 @@ TECHNOLOGIES = [
     "Plotly",
     "Bokeh",
 
-    # Other Tools
+    # Package Management & Virtual Environments
     "Pipenv",
     "Conda",
     "Poetry",
     "Virtualenv",
-    "Celery",
     "Pip",
-    "Swagger",
-    "Graphene",
-    "PyInstaller",
+
+    # Game Development
     "Pygame",
-    "Jupyter Notebook"
+
+    # System Tools
+    "Linux",
 ]
