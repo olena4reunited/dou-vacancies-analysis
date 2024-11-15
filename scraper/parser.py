@@ -1,6 +1,9 @@
+import asyncio
 import csv
 import re
 
+import aiohttp
+from aiohttp import ClientSession
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -9,6 +12,9 @@ from bs4 import BeautifulSoup
 from selenium.webdriver.support.wait import WebDriverWait
 
 from scraper.config import CSV_SCHEMA, URLS_EXPERIENCE, TECHNOLOGIES
+
+
+semaphore = asyncio.Semaphore()
 
 
 def click_more_btn_while_displayed(driver: webdriver.Firefox):
@@ -40,57 +46,67 @@ def get_requirements(requirements: str):
         if re.search(r"\b" + re.escape(technology.lower()) + r"\b", requirements, re.IGNORECASE):
             requirements_set.add(technology)
 
-
     return list(requirements_set)
 
 
-def get_detail_vacancy_info(driver: webdriver.Firefox, vacancy_url: str):
-    driver.get(vacancy_url)
+async def get_single_vacancy_info(session: ClientSession, url: str) -> dict:
+    async with semaphore:
+        async with session.get(url) as response:
+            sourse_page = await response.text()
+            soup = BeautifulSoup(sourse_page, "html.parser")
 
-    soup = BeautifulSoup(driver.page_source, "html.parser")
+            date = soup.find("div", class_="date").text
+            requirements = soup.find("div", class_="b-typo vacancy-section").text
 
-    date = soup.find("div", class_="date").text.strip()
-
-    body = soup.find("div", class_="vacancy-section").text
-
-    vacancy_details = {
-        "title": soup.find("h1", class_="g-h2").text,
-        "company": soup.find("div", class_="info").find("a").text,
-        "date": get_cleaned_date(date),
-        "url": vacancy_url,
-        "requirements": get_requirements(body),
-        "city": soup.find("span", class_="place").text,
-    }
-
-    return vacancy_details
+            return {
+                "title": soup.find("h1", class_="g-h2").text,
+                "company": soup.find("div", class_="info").find("a").text,
+                "date": get_cleaned_date(date),
+                "requirements": get_requirements(requirements),
+                "city": soup.find("span", class_="place").text,
+            }
 
 
-def parse_page(driver: webdriver.Firefox, url: str):
-    global experience_level
-    driver.get(url)
+async def get_detail_vacancies_info(vacancies_list: list) -> list[dict]:
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+
+        for vacancy in vacancies_list:
+            task = get_single_vacancy_info(session, vacancy["url"])
+            tasks.append(task)
+
+        vacancies_info = await asyncio.gather(*tasks)
+
+        for i, info in enumerate(vacancies_list):
+            info["title"] = vacancies_info[i]["title"]
+            info["company"] = vacancies_info[i]["company"]
+            info["date"] = vacancies_info[i]["date"]
+            info["requirements"] = vacancies_info[i]["requirements"]
+            info["city"] = vacancies_info[i]["city"]
+
+        return vacancies_list
+
+
+def parse_page(driver: webdriver.Firefox, experience_level: str) -> list:
     click_more_btn_while_displayed(driver)
 
     soup = BeautifulSoup(driver.page_source, 'html.parser')
-    vacancies = soup.find_all("a", class_="vt")
-    vacancies_links = [url.get("href") for url in vacancies]
+    vacancies = soup.find_all("li", class_="l-vacancy")
 
-    vacancies_info = []
+    vacancies_list = []
 
-    for vacancy_link in vacancies_links:
-        vacancies_info.append(get_detail_vacancy_info(driver, vacancy_link))
+    for vacancy in vacancies:
+        vacancies_list.append(
+            {
+                "url": vacancy.find("a").attrs["href"],
+                "experience": experience_level,
+            }
+        )
 
-    for url_level, level in URLS_EXPERIENCE:
-        if url_level == url:
-            experience_level = level
-            break
-
-    for vacancy in vacancies_info:
-        vacancy["experience"] = experience_level
-
-    return vacancies_info
+    return vacancies_list
 
 
-def write_to_csv(vacancies_list: list[dict]):
+def write_to_csv(vacancies_list: list[dict]) -> None:
     with open("../data/vacancies.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(CSV_SCHEMA)
@@ -101,19 +117,24 @@ def write_to_csv(vacancies_list: list[dict]):
             )
 
 
-def main():
+async def main() -> None:
     opts = Options()
     opts.add_argument("--headless")
 
-    browser = webdriver.Firefox(options=opts)
+    driver = webdriver.Firefox(options=opts)
 
     all_vacancies = []
 
-    for url in URLS_EXPERIENCE:
-        all_vacancies.extend(parse_page(browser, url[0]))
+    for url, experience_level in URLS_EXPERIENCE:
+        driver.get(url)
+        vacancies_list = parse_page(driver, experience_level)
+        detailed_vacancies_list = await get_detail_vacancies_info(vacancies_list)
+        all_vacancies.extend(detailed_vacancies_list)
 
     write_to_csv(all_vacancies)
 
+    driver.quit()
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
